@@ -1,2 +1,6 @@
 /venv/
 *.whl
+*.pyc
+/.idea/
+pyrightconfig.json
+*/__pycache__/
