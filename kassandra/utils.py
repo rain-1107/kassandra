@@ -1,4 +1,5 @@
 import math
+from typing import List
 
 class Vector2:
     @staticmethod
@@ -52,10 +53,10 @@ class Vector2:
         return Vector2(self.x, self.y)
 
     @property
-    def list(self):
+    def list(self) -> List[float]:
         return [self.x, self.y]
 
     @property
-    def tuple(self):
+    def tuple(self) -> tuple[float, float]:
         return (self.x, self.y)
 
