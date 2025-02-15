@@ -37,14 +37,14 @@ class Sprite(Base):
     def position(self) -> Vector2:
         if self.centered:
             return self._centre
-        return self.top_left
+        return self._top_left
 
     @position.setter
     def position(self, new: Vector2):
         if self.centered:
             self._centre = new.copy()
             return
-        self.top_left = new.copy()
+        self._top_left = new.copy()
 
 
 class AnimatedSprite(Sprite):

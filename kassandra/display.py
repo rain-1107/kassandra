@@ -1,5 +1,5 @@
 # External
-from typing import List
+from typing import Callable, List, Self
 from array import array
 import pygame
 import moderngl
@@ -79,11 +79,11 @@ class Display(Base):
         if self._update_callback:
             self._update_callback(self)
         self.ctx.clear(0, 0, 0)
-        for i, camera in enumerate(self.cameras):
+        for camera in self.cameras:
             camera.update(self.delta_time)
-            self.surface_to_texture(str(i), camera.display_surface)
-            self.textures[str(i)].use(i) 
-            self.programs[camera.shader_program_name]["tex"] = i 
+            self.surface_to_texture(camera.shader_program_name, camera.display_surface)
+            self.textures[camera.shader_program_name].use(camera.id)
+            camera.shader_uniform_callback(camera, self.programs[camera.shader_program_name]) 
             self.vaos[camera.shader_program_name].render(mode=moderngl.TRIANGLE_STRIP)
 
         pygame.display.flip()
@@ -121,6 +121,8 @@ class Display(Base):
             new_tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
             new_tex.swizzle = 'BGRA'
             new_tex.write(surface.get_view("1"))
+            new_tex.repeat_x = False
+            new_tex.repeat_y = False
             self.textures[name] = new_tex
         
 
@@ -129,17 +131,18 @@ class Display(Base):
         self.next_camera_id = 0
 
 class Camera(Base):
-    def __init__(self, size: tuple[int, int] = (500, 500), display_position: tuple[int, int] = (0, 0), world_position: tuple[int, int] = (0, 0), **kwargs):
+    def __init__(self, size: tuple[int, int] = (500, 500), **kwargs):
         super().__init__()
         self.scale: float = kwargs.get("scale", 1)
         self._surface = pygame.Surface(size, pygame.SRCALPHA)
         self._display: Display
         self._size = Vector2.list_to_vec(size)
-        self._display_position: Vector2 = Vector2.list_to_vec(display_position)
-        self._world_position: Vector2 = Vector2.list_to_vec(world_position)
+        self._display_position: Vector2 = Vector2.list_to_vec(kwargs.get("display_position", (0, 0)))
+        self._world_position: Vector2 = Vector2.list_to_vec(kwargs.get("world_position", (0, 0)))
         self._surface.set_clip((0, 0, *self._size.list))
         self.sprites: List[Sprite] = []
         self.shader_program_name: str = kwargs.get("shader_program_name", "")
+        self.shader_uniform_callback: Callable[[Self, moderngl.Program], None] = _default_shader_callback
         self.id: int
 
     def initialise(self, display: Display, id: int) -> None:
@@ -155,7 +158,6 @@ class Camera(Base):
             self._update_callback(self)
         for sprite in self.sprites:
             sprite.update(self._surface, dt, self._world_position)
-        # self._display.screen.blit(pygame.transform.scale(self._surface, [self._size.x * self.scale, self._size.y * self.scale]), self._display_position.list)
 
     @property
     def display_surface(self):
@@ -170,3 +172,10 @@ class Camera(Base):
     def remove_sprite(self, sprite: Sprite) -> None:
         if sprite in self.sprites:
             self.sprites.remove(sprite)
+
+    def set_uniform_callback(self, callback: Callable[[Self, moderngl.Program], None]) -> None:
+        self.shader_uniform_callback = callback
+
+
+def _default_shader_callback(camera: Camera, program: moderngl.Program) -> None:
+    program["tex"] = camera.id
