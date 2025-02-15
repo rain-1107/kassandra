@@ -1,11 +1,13 @@
 from typing import Tuple, Optional
 import pygame
-from .utils import Vector2
+from .math_utils import Vector2
 from .load import load_image
+from .base import Base
 from copy import deepcopy
 
-class Sprite:
+class Sprite(Base):
     def __init__(self, size: Tuple[int, int] | Vector2, position: Tuple[int, int] | Vector2, image: Optional[pygame.Surface] = None, **kwargs):
+        super().__init__()
         self.size: Vector2 = Vector2.list_to_vec(size) 
         self._image = image
         self.centered = kwargs.get("centered", False)
@@ -14,8 +16,15 @@ class Sprite:
         self._top_left: Vector2 = Vector2(0, 0)
         self._centre: Vector2 = Vector2(0, 0)
         self.position = Vector2.list_to_vec(position) 
+        self.delta_time: float = 1/60
 
-    def draw(self, surf: pygame.Surface):
+    def update(self, surf: pygame.Surface, dt: float = 1/60, position_offset: Vector2 | None = None):
+        self.delta_time = dt
+        if self._update_callback:
+            self._update_callback(self)
+        if position_offset:
+            surf.blit(self.image, (self._top_left + position_offset).list)
+            return
         surf.blit(self.image, self._top_left.list)
     
     @property
@@ -31,11 +40,11 @@ class Sprite:
         return self.top_left
 
     @position.setter
-    def position(self, new):
+    def position(self, new: Vector2):
         if self.centered:
-            self._centre = new
+            self._centre = new.copy()
             return
-        self.top_left = Vector2.list_to_vec(new)
+        self.top_left = new.copy()
 
 
 class AnimatedSprite(Sprite):
@@ -54,8 +63,11 @@ class AnimatedSprite(Sprite):
         self.state = next(iter(self.image_data))
         self.previous_state = next(iter(self.image_data))
 
-    def update_animation(self, delta_time: float = 1 / 60):
-        self.tick -= delta_time
+    def update(self, surf: pygame.Surface, dt: float = 1/60, position_offset: Vector2 | None = None):
+        self.delta_time = dt
+        if self._update_callback:
+            self._update_callback(self)
+        self.tick -= self.delta_time
         if self.tick < 0:
             self.tick = self.image_data[self.state]["tick"]
             self.index += 1
@@ -65,6 +77,10 @@ class AnimatedSprite(Sprite):
                 else:
                     self.change_state(self.previous_state)
             self._image = self.image_data[self.state]["images"][self.index]
+        if position_offset:
+            surf.blit(self.image, (self._top_left + position_offset).list)
+            return
+        surf.blit(self.image, self._top_left.list)
 
     def change_state(self, new_state):
         self.previous_state = self.state

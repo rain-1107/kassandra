@@ -2,6 +2,14 @@ import random
 import pygame
 from .gui import get_text_surf
 
+
+def read_file(filename: str):
+    file = open(filename, "r")
+    text = file.read()
+    file.close()
+    return text
+
+
 _image_cache = {}
 
 
@@ -11,6 +19,7 @@ def load_image(image_file: str, size = (50, 50)) -> pygame.Surface:
             return _image_cache[image_file]
         try:
             _image = pygame.image.load(image_file).convert_alpha()
+            _image = pygame.transform.scale(_image, size)
             _image_cache[image_file] = _image
         except FileNotFoundError:
             _surf = pygame.surface.Surface(size)
