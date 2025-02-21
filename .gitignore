@@ -1,0 +1,8 @@
+/venv/
+*.png
+/venv3.11/
+*.whl
+*.pyc
+/.idea/
+pyrightconfig.json
+*/__pycache__/
