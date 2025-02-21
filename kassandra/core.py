@@ -1,5 +1,8 @@
-from typing import Self, Callable, List
+from typing import Self, Callable, List, Tuple
+import typing
 
+FVectorLike = typing.Union[List[float], Tuple[float, float]]
+IVectorLike = typing.Union[List[int], Tuple[int, int]]
 
 class BaseObject:
     def __init__(self):
