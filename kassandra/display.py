@@ -3,7 +3,7 @@ import moderngl
 from pyglm import glm
 import ctypes
 from typing import Tuple, List, Dict
-from .core import BaseObject, IVectorLike
+from .core import * 
 
 class SHADERS:
     BASIC_VERTEX = """
@@ -12,18 +12,32 @@ class SHADERS:
     in vec2 in_texcoord;
     out vec2 texcoord;
     void main() {
-        gl_Position = vec4(in_vert, 0.0, 1.0);
+        gl_Position = vec4(in_vert.x, in_vert.y, 0.0, 1.0);
         texcoord = in_texcoord;
     }
     """
 
     BASIC_FRAGMENT = """
     #version 330
-    uniform sampler2D texture;
+    uniform sampler2D texture0;
     in vec2 texcoord;
     out vec4 fragColor;
     void main() {
-        fragColor = texture2D(texture, texcoord);
+        fragColor = texture2D(texture0, texcoord);
+    }
+    """
+    AREA_VERTEX = """
+    #version 330
+    
+    uniform vec2 top_left;
+    uniform vec2 area;
+
+    in vec2 in_vert;
+    in vec2 in_texcoord;
+    out vec2 texcoord;
+    void main() {
+        gl_Position = vec4(top_left + (area * in_vert), 1.0, 1.0);
+        texcoord = in_texcoord;
     }
     """
 
@@ -44,7 +58,7 @@ class SHADERS:
 class Window(BaseObject):
     def __init__(self, size: IVectorLike, **kwargs) -> None:
         super().__init__()
-        self._add_update_callback(Window.update_method) 
+        self.running = True
 
         # Basic pygame setup
         self.size: Tuple[int, int] = (size[0], size[1])
@@ -68,12 +82,20 @@ class Window(BaseObject):
         self.quad_buffer = self.ctx.buffer(data=vertex_array)
         self.texture_cache: Dict[str, moderngl.Texture] = {}
         self.program_cache: Dict[Tuple[str, str], Tuple[moderngl.Program, moderngl.VertexArray]] = {}
+        self.ready()
 
-    def update_method(self) -> None:
+    def start(self) -> None:
+        while self.running:
+            self.update()
+
+    def _object_update_method(self) -> None:
         self.delta_time = self.clock.tick(self.fps) / 1000 
         for _ in pygame.event.get(eventtype=pygame.QUIT):
             pygame.quit()
+            self.running = False
             return
+        pygame.display.flip()
+        self.ctx.screen.clear(0, 0, 0)
 
     def compile_shader(self, vertex_shader: str, fragment_shader: str) -> Tuple[moderngl.Program, moderngl.VertexArray]:
         program = self.ctx.program(
@@ -92,6 +114,7 @@ class Window(BaseObject):
         texture.write(surface.get_view("1"))
         return texture
 
+
 class Sprite(BaseObject):
     def __init__(self, window: Window, image: pygame.Surface, size: IVectorLike, position: IVectorLike = (0, 0), **kwargs) -> None:
         super().__init__()
@@ -100,18 +123,54 @@ class Sprite(BaseObject):
         self.size = (size[0], size[1])
         self.position = (position[0], position[1])
 
-    def queue_render(self, surface: "GLSurface") -> None:
-        surface.sprite_render_queue.append(self)
-
 
 class GLSurface(BaseObject):
-    def __init__(self, window: Window, size: IVectorLike) -> None:
+    def __init__(self, window: Window, size: IVectorLike, **kwargs) -> None:
         super().__init__()
         self.window = window
         self.size = (size[0], size[1])
-        self.fbo = self.window.ctx.framebuffer(color_attachments=[self.window.ctx.texture(self.size, 4)])
-        self.sprite_render_queue: List[Sprite] = []
-        self._add_update_callback(GLSurface.update_method)
+        self.fbo = self.window.ctx.framebuffer(
+            color_attachments=[self.window.ctx.texture(self.size, 4)]
+        )
+        self._custom_shader = False
+        if kwargs.get("shader_program", None):
+            self.program, self.vertex_array = kwargs["shader_program"]
+            self._custom_shader = True
+        else:
+            self.program, self.vertex_array = self.window.compile_shader(SHADERS.BASIC_VERTEX, SHADERS.BASIC_FRAGMENT)
+        self.set_uniforms = _uniform_setter_placeholder 
     
-    def update_method(self) -> None:
-        self.fbo.clear()
+    def render(self) -> None:
+        self.update()
+        # Render the fbo to the screen
+        self.window.ctx.screen.use()
+        self.fbo.color_attachments[0].use() # type: ignore (Pyright complains that it might not be a texture)
+        self.set_uniforms(self) # Is actually a classless function
+        self.vertex_array.render(moderngl.TRIANGLE_STRIP)
+
+    @property
+    def uniform_setter(self) -> Callable[[Callable], Callable]:
+        def wrapper(function: Callable[[Self], None]) -> Callable:
+            self.set_uniforms = function
+            return function
+        return wrapper
+
+def _uniform_setter_placeholder(_: GLSurface) -> None:
+    pass
+
+class Camera(BaseObject):
+    def __init__(self, window: Window, **kwargs) -> None:
+        super().__init__()
+        self.window = window
+        self.viewport_size: IVectorLike = kwargs.get("viewport_size", (window.size[0], window.size[1]))
+        self.display_size: IVectorLike = kwargs.get("display_size", (window.size[0], window.size[1]))
+        self.viewport_position: IVectorLike = kwargs.get("viewport_position", (0, 0))
+        self.display_position: IVectorLike = kwargs.get("display_position", (0, 0))
+        if kwargs.get("surface", None):
+            self.surface = kwargs["surface"]
+        else:
+            self.surface = GLSurface(window, self.viewport_size)
+        self.render_queue: List[Sprite] = []
+    
+    def _object_update_method(self) -> None:
+        pass

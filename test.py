@@ -1,9 +1,15 @@
 import kassandra
 
-window = kassandra.Window()
+window = kassandra.Window((500, 500), fullscreen=False)
+
+surface = kassandra.display.GLSurface(window, (500, 500))
 
 @window.on_update
-def cool(ctx):
+def update(ctx: kassandra.Window) -> None:
+    surface.update() 
+
+@surface.uniform_setter
+def set_uniforms(ctx: kassandra.display.GLSurface) -> None:
     print("test")
 
-window.update()
+window.start()
